@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,7 +7,30 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>Whisper Clip Settings</h1>
+  <div id="app">
+    <h1>Whisper Clip 设置</h1>
+
+    <div class="field">
+      <label for="api-key">Groq API Key</label>
+      <input type="password" id="api-key" placeholder="gsk_..." />
+      <span id="api-status" class="status"></span>
+    </div>
+
+    <div class="field">
+      <label for="mic-device">麦克风设备</label>
+      <select id="mic-device">
+        <option value="">系统默认</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>快捷键</label>
+      <span class="hotkey-display">⌘ ⇧ Space（按住录音）</span>
+    </div>
+
+    <button id="save-btn">保存</button>
+    <span id="save-status"></span>
+  </div>
   <script src="main.js"></script>
 </body>
 </html>

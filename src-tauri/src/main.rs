@@ -57,6 +57,24 @@ fn truncate_for_menu(text: &str) -> String {
     text.chars().take(30).collect::<String>()
 }
 
+#[tauri::command]
+fn get_config() -> Result<config::AppConfig, String> {
+    let path = config::config_path();
+    config::load_config(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_config_cmd(new_config: config::AppConfig) -> Result<(), String> {
+    let path = config::config_path();
+    config::save_config(&path, &new_config).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_audio_devices() -> Vec<String> {
+    let recorder = audio::AudioRecorder::new();
+    recorder.list_devices()
+}
+
 fn main() {
     // Load config before builder so we can use it in the setup closure.
     let app_config = config::load_config(&config::config_path()).unwrap_or_default();
@@ -241,6 +259,11 @@ fn main() {
 
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![
+            get_config,
+            save_config_cmd,
+            list_audio_devices,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
