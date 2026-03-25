@@ -20,6 +20,16 @@ use tauri::{
 
 use state::{AppState, AppStatus};
 
+/// Play a macOS system sound asynchronously (non-blocking).
+fn play_sound(name: &str) {
+    let path = format!("/System/Library/Sounds/{name}.aiff");
+    std::thread::spawn(move || {
+        let _ = std::process::Command::new("afplay")
+            .arg(&path)
+            .output();
+    });
+}
+
 /// Helper to load a tray icon image from the icons directory.
 fn load_icon(app: &AppHandle, name: &str) -> Option<Image<'static>> {
     // Try resource_dir first (bundled app), then fall back to src-tauri/icons (dev mode)
@@ -245,6 +255,7 @@ fn main() {
                             {
                                 match recorder.start_recording() {
                                     Ok(()) => {
+                                        play_sound("Pop");  // 开始录音提示音
                                         {
                                             let mut st = worker_state.lock().unwrap();
                                             st.set_status(AppStatus::Recording);
@@ -264,6 +275,7 @@ fn main() {
                                 continue;
                             }
 
+                            play_sound("Pop");  // 停止录音提示音
                             let sample_rate = recorder.sample_rate();
                             let samples = recorder.stop_recording();
 
@@ -362,6 +374,7 @@ async fn run_pipeline(
     if let Err(e) = clipboard::copy_to_clipboard(&text) {
         eprintln!("clipboard error: {e}");
     }
+    play_sound("Tink");  // 转写完成提示音
 
     // Update the last-text tray menu item (UTF-8 safe truncation).
     let display = truncate_for_menu(&text);
