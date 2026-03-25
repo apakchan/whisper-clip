@@ -255,7 +255,7 @@ fn main() {
                             {
                                 match recorder.start_recording() {
                                     Ok(()) => {
-                                        play_sound("Pop");  // 开始录音提示音
+                                        play_sound("Glass");  // 开始录音提示音
                                         {
                                             let mut st = worker_state.lock().unwrap();
                                             st.set_status(AppStatus::Recording);
@@ -275,7 +275,6 @@ fn main() {
                                 continue;
                             }
 
-                            play_sound("Pop");  // 停止录音提示音
                             let sample_rate = recorder.sample_rate();
                             let samples = recorder.stop_recording();
 
