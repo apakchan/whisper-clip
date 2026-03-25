@@ -168,4 +168,8 @@ impl AudioRecorder {
     pub fn buffer_ref(&self) -> Arc<Mutex<Vec<f32>>> {
         self.buffer.clone()
     }
+
+    pub fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
 }
