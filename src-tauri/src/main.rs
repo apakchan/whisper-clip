@@ -102,6 +102,15 @@ fn main() {
     let app_state: Arc<Mutex<AppState>> = Arc::new(Mutex::new(AppState::new()));
 
     tauri::Builder::default()
+        .on_window_event(|_window, event| {
+            // Prevent app from exiting when settings window is closed.
+            // This is a menu-bar app — it should keep running with no windows.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                // Hide the window instead of closing
+                let _ = _window.hide();
+            }
+        })
         .setup(move |app| {
             let handle = app.handle().clone();
 
@@ -172,15 +181,21 @@ fn main() {
                         }
                     }
                     "settings" => {
-                        let _ = WebviewWindowBuilder::new(
-                            &menu_handle,
-                            "settings",
-                            WebviewUrl::App("index.html".into()),
-                        )
-                        .title("设置 — Whisper Clip")
-                        .inner_size(480.0, 360.0)
-                        .resizable(false)
-                        .build();
+                        // Show existing hidden window, or create a new one
+                        if let Some(win) = menu_handle.get_webview_window("settings") {
+                            let _ = win.show();
+                            let _ = win.set_focus();
+                        } else {
+                            let _ = WebviewWindowBuilder::new(
+                                &menu_handle,
+                                "settings",
+                                WebviewUrl::App("index.html".into()),
+                            )
+                            .title("设置 — Whisper Clip")
+                            .inner_size(480.0, 360.0)
+                            .resizable(false)
+                            .build();
+                        }
                     }
                     "quit" => {
                         menu_handle.exit(0);

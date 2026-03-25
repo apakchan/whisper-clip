@@ -14,7 +14,7 @@ core-graphics = "0.24"
 core-foundation = "0.10"
 cpal = "0.15"
 hound = "3.5"
-reqwest = { version = "0.12", features = ["multipart", "json"] }
+reqwest = { version = "0.12", features = ["multipart", "json", "native-tls"] }
 tokio = { version = "1", features = ["full"] }
 dirs = "6"
 arboard = "3"
