@@ -12,7 +12,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tauri::{
-    image::Image,
     menu::{MenuBuilder, MenuItem, MenuItemBuilder},
     tray::TrayIconBuilder,
     AppHandle, Manager, Wry, WebviewUrl, WebviewWindowBuilder,
@@ -30,42 +29,25 @@ fn play_sound(name: &str) {
     });
 }
 
-/// Helper to load a tray icon image from the icons directory.
-fn load_icon(app: &AppHandle, name: &str) -> Option<Image<'static>> {
-    // Try resource_dir first (bundled app), then fall back to src-tauri/icons (dev mode)
-    let resource_path = app
-        .path()
-        .resource_dir()
-        .ok()
-        .map(|p| p.join("icons").join(name));
+/// Embedded tray icons — compiled into the binary so no runtime path issues.
+mod icons {
+    use tauri::image::Image;
 
-    let dev_path = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
-        .map(|p| {
-            // In dev mode, binary is at src-tauri/target/debug/whisper-clip
-            // Icons are at src-tauri/icons/
-            p.join("../../../icons").join(name)
-        });
+    static IDLE: &[u8] = include_bytes!("../icons/icon-idle.png");
+    static RECORDING: &[u8] = include_bytes!("../icons/icon-recording.png");
+    static TRANSCRIBING: &[u8] = include_bytes!("../icons/icon-transcribing.png");
+    static DONE: &[u8] = include_bytes!("../icons/icon-done.png");
+    static ERROR: &[u8] = include_bytes!("../icons/icon-error.png");
 
-    for path in [resource_path, dev_path].into_iter().flatten() {
-        if path.exists() {
-            if let Ok(img) = Image::from_path(&path) {
-                return Some(img.to_owned());
-            }
-        }
-    }
-    None
-}
-
-/// Return the icon filename for the given status.
-fn icon_for_status(status: AppStatus) -> &'static str {
-    match status {
-        AppStatus::Idle => "icon-idle.png",
-        AppStatus::Recording => "icon-recording.png",
-        AppStatus::Transcribing => "icon-transcribing.png",
-        AppStatus::Done => "icon-done.png",
-        AppStatus::Error => "icon-error.png",
+    pub fn for_status(status: super::AppStatus) -> Image<'static> {
+        let bytes = match status {
+            super::AppStatus::Idle => IDLE,
+            super::AppStatus::Recording => RECORDING,
+            super::AppStatus::Transcribing => TRANSCRIBING,
+            super::AppStatus::Done => DONE,
+            super::AppStatus::Error => ERROR,
+        };
+        Image::from_bytes(bytes).expect("embedded icon must be valid PNG")
     }
 }
 
@@ -73,9 +55,7 @@ fn icon_for_status(status: AppStatus) -> &'static str {
 fn update_tray_icon(app: &AppHandle, status: AppStatus) {
     use tauri::tray::TrayIconId;
     if let Some(tray) = app.tray_by_id(&TrayIconId::new("main")) {
-        if let Some(icon) = load_icon(app, icon_for_status(status)) {
-            let _ = tray.set_icon(Some(icon));
-        }
+        let _ = tray.set_icon(Some(icons::for_status(status)));
     }
 }
 
@@ -155,24 +135,13 @@ fn main() {
                 .build()?;
 
             // ---- Build tray icon ----
-            let initial_icon = load_icon(&handle, "icon-idle.png");
-            let mut tray_builder = TrayIconBuilder::with_id("main")
+            TrayIconBuilder::with_id("main")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(true)
                 .icon_as_template(true)
-                .tooltip("Whisper Clip");
-
-            if let Some(icon) = initial_icon {
-                tray_builder = tray_builder.icon(icon);
-            } else {
-                // Fallback: use a built-in icon so the tray item is always visible
-                eprintln!("Warning: could not load tray icon, using default");
-                let fallback = Image::from_bytes(include_bytes!("../icons/icon.png"))
-                    .expect("fallback icon must be valid");
-                tray_builder = tray_builder.icon(fallback);
-            }
-
-            tray_builder.build(app)?;
+                .icon(icons::for_status(AppStatus::Idle))
+                .tooltip("Whisper Clip")
+                .build(app)?;
 
             // Clone the last_text_item so both the menu handler and the worker thread can use it.
             let last_text_for_event = last_text_item.clone();
