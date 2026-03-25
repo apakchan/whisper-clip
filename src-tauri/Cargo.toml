@@ -17,3 +17,6 @@ reqwest = { version = "0.12", features = ["multipart", "json"] }
 tokio = { version = "1", features = ["full"] }
 dirs = "6"
 arboard = "3"
+
+[dev-dependencies]
+tempfile = "3"
