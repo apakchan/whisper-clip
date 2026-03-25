@@ -1,8 +1,7 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Device, Host, SampleRate, Stream, StreamConfig};
+use cpal::{Device, Host, Stream, StreamConfig};
 use std::sync::{Arc, Mutex};
 
-const TARGET_SAMPLE_RATE: u32 = 16000;
 const MAX_RECORDING_SECS: u64 = 600; // 10 minutes
 
 pub struct AudioRecorder {
@@ -21,18 +20,14 @@ impl AudioRecorder {
             device: None,
             stream: None,
             buffer: Arc::new(Mutex::new(Vec::new())),
-            sample_rate: TARGET_SAMPLE_RATE,
+            sample_rate: 16000,
         }
     }
 
     pub fn list_devices(&self) -> Vec<String> {
         self.host
             .input_devices()
-            .map(|devices| {
-                devices
-                    .filter_map(|d| d.name().ok())
-                    .collect()
-            })
+            .map(|devices| devices.filter_map(|d| d.name().ok()).collect())
             .unwrap_or_default()
     }
 
@@ -63,45 +58,26 @@ impl AudioRecorder {
             &fallback_device
         };
 
+        // Use the device's default config — no resampling, no quality loss.
+        // Whisper handles sample rate conversion internally.
+        let default_config = device
+            .default_input_config()
+            .map_err(|e| format!("Failed to get default config: {e}"))?;
+
+        let actual_rate = default_config.sample_rate().0;
+        let actual_channels = default_config.channels() as usize;
+
+        self.sample_rate = actual_rate;
+
         let config = StreamConfig {
-            channels: 1,
-            sample_rate: SampleRate(TARGET_SAMPLE_RATE),
+            channels: default_config.channels(),
+            sample_rate: default_config.sample_rate(),
             buffer_size: cpal::BufferSize::Default,
         };
 
-        let (actual_config, needs_resample) =
-            match device.supported_input_configs() {
-                Ok(mut configs) => {
-                    let supports_target = configs.any(|c| {
-                        c.channels() == 1
-                            && c.min_sample_rate().0 <= TARGET_SAMPLE_RATE
-                            && c.max_sample_rate().0 >= TARGET_SAMPLE_RATE
-                    });
-                    if supports_target {
-                        (config, false)
-                    } else {
-                        let default_config = device
-                            .default_input_config()
-                            .map_err(|e| format!("Failed to get default config: {e}"))?;
-                        self.sample_rate = default_config.sample_rate().0;
-                        (
-                            StreamConfig {
-                                channels: default_config.channels(),
-                                sample_rate: default_config.sample_rate(),
-                                buffer_size: cpal::BufferSize::Default,
-                            },
-                            true,
-                        )
-                    }
-                }
-                Err(_) => (config, false),
-            };
-
         let buffer = self.buffer.clone();
-        let max_samples = (TARGET_SAMPLE_RATE as u64 * MAX_RECORDING_SECS) as usize;
-        let channels = actual_config.channels as usize;
-        let source_rate = actual_config.sample_rate.0;
-        let target_rate = TARGET_SAMPLE_RATE;
+        // Max samples for mono at actual rate
+        let max_samples = (actual_rate as u64 * MAX_RECORDING_SECS) as usize;
 
         {
             let mut buf = buffer.lock().map_err(|e| format!("Lock error: {e}"))?;
@@ -110,7 +86,7 @@ impl AudioRecorder {
 
         let stream = device
             .build_input_stream(
-                &actual_config,
+                &config,
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
                     let mut buf = match buffer.lock() {
                         Ok(b) => b,
@@ -120,23 +96,14 @@ impl AudioRecorder {
                         return;
                     }
 
-                    let mono_samples: Vec<f32> = if channels > 1 {
-                        data.chunks(channels)
-                            .map(|chunk| chunk.iter().sum::<f32>() / channels as f32)
-                            .collect()
-                    } else {
-                        data.to_vec()
-                    };
-
-                    if needs_resample && source_rate != target_rate {
-                        let ratio = source_rate as f64 / target_rate as f64;
-                        let mut i = 0.0_f64;
-                        while (i as usize) < mono_samples.len() {
-                            buf.push(mono_samples[i as usize]);
-                            i += ratio;
+                    // Mix to mono if stereo/multi-channel
+                    if actual_channels > 1 {
+                        for chunk in data.chunks(actual_channels) {
+                            let mono = chunk.iter().sum::<f32>() / actual_channels as f32;
+                            buf.push(mono);
                         }
                     } else {
-                        buf.extend_from_slice(&mono_samples);
+                        buf.extend_from_slice(data);
                     }
                 },
                 |err| {
@@ -151,22 +118,20 @@ impl AudioRecorder {
             .map_err(|e| format!("Failed to start stream: {e}"))?;
 
         self.stream = Some(stream);
+
+        eprintln!("Recording at {}Hz, {} channel(s) → mono", actual_rate, actual_channels);
+
         Ok(())
     }
 
     pub fn stop_recording(&mut self) -> Vec<f32> {
         self.stream = None;
         let buf = self.buffer.lock().unwrap_or_else(|e| e.into_inner());
+        eprintln!("Stopped recording: {} samples ({:.1}s at {}Hz)",
+            buf.len(),
+            buf.len() as f32 / self.sample_rate as f32,
+            self.sample_rate);
         buf.clone()
-    }
-
-    pub fn recording_duration_secs(&self) -> f32 {
-        let buf = self.buffer.lock().unwrap_or_else(|e| e.into_inner());
-        buf.len() as f32 / TARGET_SAMPLE_RATE as f32
-    }
-
-    pub fn buffer_ref(&self) -> Arc<Mutex<Vec<f32>>> {
-        self.buffer.clone()
     }
 
     pub fn sample_rate(&self) -> u32 {
