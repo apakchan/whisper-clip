@@ -22,13 +22,30 @@ use state::{AppState, AppStatus};
 
 /// Helper to load a tray icon image from the icons directory.
 fn load_icon(app: &AppHandle, name: &str) -> Option<Image<'static>> {
-    let path = app
+    // Try resource_dir first (bundled app), then fall back to src-tauri/icons (dev mode)
+    let resource_path = app
         .path()
         .resource_dir()
-        .ok()?
-        .join("icons")
-        .join(name);
-    Image::from_path(&path).ok().map(|img| img.to_owned())
+        .ok()
+        .map(|p| p.join("icons").join(name));
+
+    let dev_path = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+        .map(|p| {
+            // In dev mode, binary is at src-tauri/target/debug/whisper-clip
+            // Icons are at src-tauri/icons/
+            p.join("../../../icons").join(name)
+        });
+
+    for path in [resource_path, dev_path].into_iter().flatten() {
+        if path.exists() {
+            if let Ok(img) = Image::from_path(&path) {
+                return Some(img.to_owned());
+            }
+        }
+    }
+    None
 }
 
 /// Return the icon filename for the given status.
@@ -123,10 +140,17 @@ fn main() {
             let mut tray_builder = TrayIconBuilder::with_id("main")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(true)
+                .icon_as_template(true)
                 .tooltip("Whisper Clip");
 
             if let Some(icon) = initial_icon {
                 tray_builder = tray_builder.icon(icon);
+            } else {
+                // Fallback: use a built-in icon so the tray item is always visible
+                eprintln!("Warning: could not load tray icon, using default");
+                let fallback = Image::from_bytes(include_bytes!("../icons/icon.png"))
+                    .expect("fallback icon must be valid");
+                tray_builder = tray_builder.icon(fallback);
             }
 
             tray_builder.build(app)?;
