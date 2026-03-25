@@ -4,8 +4,11 @@ use serde::Deserialize;
 pub const GROQ_TRANSCRIPTION_URL: &str =
     "https://api.groq.com/openai/v1/audio/transcriptions";
 
-const MODEL: &str = "whisper-large-v3";
+const MODEL: &str = "whisper-large-v3-turbo";
 const TIMEOUT_SECS: u64 = 30;
+// Prompt hints the model about expected language mix and domain vocabulary.
+// Whisper uses the prompt as conditioning context to improve accuracy.
+const PROMPT: &str = "以下是一段中英文混合的语音内容，可能包含编程术语如 API、function、debug、deploy、server、Python、Rust、TypeScript 等。";
 
 #[derive(Deserialize)]
 struct TranscriptionResponse {
@@ -33,7 +36,9 @@ pub async fn transcribe(api_key: &str, wav_bytes: Vec<u8>) -> Result<String, Str
     let form = multipart::Form::new()
         .part("file", file_part)
         .text("model", MODEL)
-        .text("response_format", "json");
+        .text("response_format", "json")
+        .text("prompt", PROMPT)
+        .text("temperature", "0");
 
     let response = client
         .post(GROQ_TRANSCRIPTION_URL)
