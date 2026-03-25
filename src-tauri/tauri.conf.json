@@ -12,13 +12,9 @@
   },
   "bundle": {
     "active": true,
-    "identifier": "com.whisper-clip",
     "icon": ["icons/icon.png"],
     "macOS": {
-      "minimumSystemVersion": "12.0",
-      "infoPlist": {
-        "NSMicrophoneUsageDescription": "Whisper Clip needs microphone access to record audio for speech-to-text transcription."
-      }
+      "minimumSystemVersion": "12.0"
     },
     "targets": ["dmg"]
   }
