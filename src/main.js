@@ -14,6 +14,13 @@ async function loadConfig() {
       status.className = "status error";
     }
 
+    const modelSelect = document.getElementById("model");
+    if (config.model) {
+      modelSelect.value = config.model;
+    }
+
+    document.getElementById("prompt").value = config.prompt || "";
+
     const devices = await invoke("list_audio_devices");
     const select = document.getElementById("mic-device");
     devices.forEach((name) => {
@@ -33,6 +40,8 @@ async function loadConfig() {
 document.getElementById("save-btn").addEventListener("click", async () => {
   const apiKey = document.getElementById("api-key").value.trim();
   const micDevice = document.getElementById("mic-device").value || null;
+  const model = document.getElementById("model").value;
+  const prompt = document.getElementById("prompt").value.trim();
 
   try {
     await invoke("save_config_cmd", {
@@ -40,6 +49,8 @@ document.getElementById("save-btn").addEventListener("click", async () => {
         api_key: apiKey,
         hotkey: "CommandLeft+ShiftLeft+Space",
         microphone_device: micDevice,
+        model: model,
+        prompt: prompt,
       },
     });
 

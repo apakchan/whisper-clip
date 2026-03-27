@@ -64,6 +64,13 @@ fn truncate_for_menu(text: &str) -> String {
     text.chars().take(30).collect::<String>()
 }
 
+/// Runtime config values shared between the worker thread and Tauri commands.
+struct RuntimeConfig {
+    api_key: Mutex<String>,
+    model: Mutex<String>,
+    prompt: Mutex<String>,
+}
+
 #[tauri::command]
 fn get_config() -> Result<config::AppConfig, String> {
     let path = config::config_path();
@@ -71,9 +78,17 @@ fn get_config() -> Result<config::AppConfig, String> {
 }
 
 #[tauri::command]
-fn save_config_cmd(new_config: config::AppConfig) -> Result<(), String> {
+fn save_config_cmd(
+    new_config: config::AppConfig,
+    runtime: tauri::State<'_, Arc<RuntimeConfig>>,
+) -> Result<(), String> {
     let path = config::config_path();
-    config::save_config(&path, &new_config).map_err(|e| e.to_string())
+    config::save_config(&path, &new_config).map_err(|e| e.to_string())?;
+    // Sync runtime values so the worker thread picks up changes immediately.
+    *runtime.api_key.lock().unwrap() = new_config.api_key;
+    *runtime.model.lock().unwrap() = new_config.model;
+    *runtime.prompt.lock().unwrap() = new_config.prompt;
+    Ok(())
 }
 
 #[tauri::command]
@@ -85,13 +100,18 @@ fn list_audio_devices() -> Vec<String> {
 fn main() {
     // Load config before builder so we can use it in the setup closure.
     let app_config = config::load_config(&config::config_path()).unwrap_or_default();
-    let api_key = Arc::new(Mutex::new(app_config.api_key.clone()));
+    let runtime = Arc::new(RuntimeConfig {
+        api_key: Mutex::new(app_config.api_key.clone()),
+        model: Mutex::new(app_config.model.clone()),
+        prompt: Mutex::new(app_config.prompt.clone()),
+    });
     let mic_device = app_config.microphone_device.clone();
 
     // Shared app state (status + last transcription).
     let app_state: Arc<Mutex<AppState>> = Arc::new(Mutex::new(AppState::new()));
 
     tauri::Builder::default()
+        .manage(Arc::clone(&runtime))
         .on_window_event(|_window, event| {
             // Prevent app from exiting when settings window is closed.
             // This is a menu-bar app — it should keep running with no windows.
@@ -171,8 +191,9 @@ fn main() {
                                 WebviewUrl::App("index.html".into()),
                             )
                             .title("设置 — Whisper Clip")
-                            .inner_size(480.0, 360.0)
-                            .resizable(false)
+                            .inner_size(480.0, 520.0)
+                            .min_inner_size(400.0, 400.0)
+                            .resizable(true)
                             .build();
                         }
                     }
@@ -189,7 +210,7 @@ fn main() {
             // boundaries with it, so no unsafe Send wrapper is needed.
             let worker_handle = handle.clone();
             let worker_state = Arc::clone(&app_state);
-            let worker_api_key = Arc::clone(&api_key);
+            let worker_runtime = Arc::clone(&runtime);
 
             std::thread::spawn(move || {
                 let mut recorder = audio::AudioRecorder::new();
@@ -257,14 +278,14 @@ fn main() {
                             // Clone all the values we need — AudioRecorder stays on this thread.
                             let pipeline_handle = worker_handle.clone();
                             let pipeline_state = Arc::clone(&worker_state);
-                            let pipeline_api_key = Arc::clone(&worker_api_key);
+                            let pipeline_runtime = Arc::clone(&worker_runtime);
                             let pipeline_last_item = last_text_for_worker.clone();
 
                             tauri::async_runtime::spawn(async move {
                                 run_pipeline(
                                     samples,
                                     sample_rate,
-                                    pipeline_api_key,
+                                    pipeline_runtime,
                                     pipeline_state,
                                     pipeline_handle,
                                     pipeline_last_item,
@@ -312,7 +333,7 @@ fn transition_to_error(app: &AppHandle, state: &Arc<Mutex<AppState>>) {
 async fn run_pipeline(
     samples: Vec<f32>,
     sample_rate: u32,
-    api_key: Arc<Mutex<String>>,
+    runtime: Arc<RuntimeConfig>,
     state: Arc<Mutex<AppState>>,
     app: AppHandle,
     last_text_item: MenuItem<Wry>,
@@ -328,8 +349,10 @@ async fn run_pipeline(
     };
 
     // Transcribe via Groq Whisper API.
-    let key = api_key.lock().unwrap().clone();
-    let text = match api::transcribe(&key, wav_bytes).await {
+    let key = runtime.api_key.lock().unwrap().clone();
+    let mdl = runtime.model.lock().unwrap().clone();
+    let pmt = runtime.prompt.lock().unwrap().clone();
+    let text = match api::transcribe(&key, &mdl, &pmt, wav_bytes).await {
         Ok(t) => t,
         Err(e) => {
             eprintln!("transcribe error: {e}");

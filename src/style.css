@@ -9,7 +9,7 @@ body {
 h1 { font-size: 18px; margin-bottom: 20px; font-weight: 600; }
 .field { margin-bottom: 16px; }
 .field label { display: block; margin-bottom: 6px; color: #aaa; font-size: 12px; }
-.field input, .field select {
+.field textarea, .field input, .field select {
   width: 100%;
   padding: 8px 10px;
   background: #2a2a2a;
@@ -18,7 +18,7 @@ h1 { font-size: 18px; margin-bottom: 20px; font-weight: 600; }
   color: #e0e0e0;
   font-size: 14px;
 }
-.field input:focus, .field select:focus {
+.field textarea:focus, .field input:focus, .field select:focus {
   outline: none;
   border-color: #6b8afd;
 }
@@ -43,4 +43,6 @@ button {
   font-size: 14px;
 }
 button:hover { background: #5a7ae6; }
+.field textarea { resize: vertical; font-family: inherit; line-height: 1.5; }
+.hint { display: block; margin-top: 4px; font-size: 11px; color: #777; }
 #save-status { font-size: 12px; margin-left: 12px; color: #4caf50; }

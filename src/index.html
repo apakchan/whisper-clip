@@ -24,6 +24,20 @@
     </div>
 
     <div class="field">
+      <label for="model">语音识别模型</label>
+      <select id="model">
+        <option value="whisper-large-v3-turbo">whisper-large-v3-turbo（快速）</option>
+        <option value="whisper-large-v3">whisper-large-v3（高精度）</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="prompt">识别提示词</label>
+      <textarea id="prompt" rows="3" placeholder="描述你的身份和常用词汇，帮助模型更准确识别..."></textarea>
+      <span class="hint">提示模型你可能说的内容，例如技术术语、专业词汇等</span>
+    </div>
+
+    <div class="field">
       <label>快捷键</label>
       <span class="hotkey-display">⌘ ⇧ Space（按住录音）</span>
     </div>
